@@ -22,6 +22,72 @@ function getStatus(flags) {
     return 'Active';
 }
 
+async function generatePostMessage(post) {
+    const status = getStatus(post.flags);
+    let color;
+    if (status === 'Deleted') {
+        color = '#FF0000';
+    } else if (status === 'Pending') {
+        color = '#FFFF00';
+    } else {
+        color = '#33cc33';
+    }
+
+    const embed = new EmbedBuilder()
+        .setColor(color)
+        .setTitle(`Post #${post.id}`)
+        .setURL(`${e6ai.baseUrl}/posts/${post.id}`)
+        .setDescription(post.description || 'No description provided.')
+        .addFields(
+            { name: 'Likes', value: String(post.score.total), inline: true },
+            { name: 'Favorites', value: String(post.fav_count), inline: true },
+            { name: 'Posted', value: `<t:${Math.floor(new Date(post.created_at).getTime() / 1000)}:R>`, inline: true },
+            { name: 'Size', value: `${post.file.width}x${post.file.height} (${formatBytes(post.file.size)})`, inline: true },
+            { name: 'Type', value: post.file.ext.toUpperCase(), inline: true },
+            { name: 'Status', value: status, inline: true }
+        );
+    
+    if (post.approver_id) {
+        embed.addFields({ name: 'Approver', value: `ID: ${post.approver_id}`, inline: true });
+    }
+
+    const replyOptions = { embeds: [embed], files: [] };
+    if (post.file && post.file.url) {
+        const fileName = post.file.url.split('/').pop();
+        const attachment = new AttachmentBuilder(post.file.url, { name: fileName });
+        embed.setImage(`attachment://${fileName}`);
+        replyOptions.files = [attachment];
+    }
+
+    const isFirstApiUrl = `${e6ai.baseUrl}/posts.json?tags=id:<${post.id} order:id_desc&limit=1`;
+    const isLastApiUrl = `${e6ai.baseUrl}/posts.json?tags=id:>${post.id} order:id_asc&limit=1`;
+
+    const [isFirstResponse, isLastResponse] = await Promise.all([
+        axios.get(isFirstApiUrl, { headers: { 'User-Agent': e6ai.userAgent } }),
+        axios.get(isLastApiUrl, { headers: { 'User-Agent': e6ai.userAgent } })
+    ]);
+
+    const isFirst = !(isFirstResponse.status === 200 && isFirstResponse.data.posts && isFirstResponse.data.posts.length > 0);
+    const isLast = !(isLastResponse.status === 200 && isLastResponse.data.posts && isLastResponse.data.posts.length > 0);
+    
+    const buttons = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId(`view_prev:${post.id}`)
+                .setLabel('⬅️ Prev')
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(isFirst),
+            new ButtonBuilder()
+                .setCustomId(`view_next:${post.id}`)
+                .setLabel('Next ➡️')
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(isLast)
+        );
+    
+    replyOptions.components = [buttons];
+    return replyOptions;
+}
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('view')
@@ -59,72 +125,71 @@ module.exports = {
 
             if (response.status === 200 && response.data.posts && response.data.posts.length > 0) {
                 const post = response.data.posts[0];
-
-                const status = getStatus(post.flags);
-                let color;
-                if (status === 'Deleted') {
-                    color = '#FF0000';
-                } else if (status === 'Pending') {
-                    color = '#FFFF00';
-                } else {
-                    color = '#33cc33';
-                }
-
-                const embed = new EmbedBuilder()
-                    .setColor(color)
-                    .setTitle(`Post #${post.id}`)
-                    .setURL(`${e6ai.baseUrl}/posts/${post.id}`)
-                    .setDescription(post.description || 'No description provided.')
-                    .addFields(
-                        { name: 'Likes', value: String(post.score.total), inline: true },
-                        { name: 'Favorites', value: String(post.fav_count), inline: true },
-                        { name: 'Posted', value: `<t:${Math.floor(new Date(post.created_at).getTime() / 1000)}:R>`, inline: true },
-                        { name: 'Size', value: `${post.file.width}x${post.file.height} (${formatBytes(post.file.size)})`, inline: true },
-                        { name: 'Type', value: post.file.ext.toUpperCase(), inline: true },
-                        { name: 'Status', value: status, inline: true }
-                    );
                 
-                if (post.approver_id) {
-                    embed.addFields({ name: 'Approver', value: `ID: ${post.approver_id}`, inline: true });
-                }
-
-                const replyOptions = { embeds: [embed] };
-                if (post.file && post.file.url) {
-                    const fileName = post.file.url.split('/').pop();
-                    const attachment = new AttachmentBuilder(post.file.url, { name: fileName });
-                    embed.setImage(`attachment://${fileName}`);
-                    replyOptions.files = [attachment];
-                }
-
-                const isFirstApiUrl = `${e6ai.baseUrl}/posts.json?tags=id:<${post.id} order:id_desc&limit=1`;
-                const isLastApiUrl = `${e6ai.baseUrl}/posts.json?tags=id:>${post.id} order:id_asc&limit=1`;
-
-                const [isFirstResponse, isLastResponse] = await Promise.all([
-                    axios.get(isFirstApiUrl, { headers: { 'User-Agent': e6ai.userAgent } }),
-                    axios.get(isLastApiUrl, { headers: { 'User-Agent': e6ai.userAgent } })
-                ]);
-
-                const isFirst = !(isFirstResponse.status === 200 && isFirstResponse.data.posts && isFirstResponse.data.posts.length > 0);
-                const isLast = !(isLastResponse.status === 200 && isLastResponse.data.posts && isLastResponse.data.posts.length > 0);
-                
-                const buttons = new ActionRowBuilder()
-                    .addComponents(
-                        new ButtonBuilder()
-                            .setCustomId(`view_prev:${post.id}`)
-                            .setLabel('⬅️ Prev')
-                            .setStyle(ButtonStyle.Primary)
-                            .setDisabled(isFirst),
-                        new ButtonBuilder()
-                            .setCustomId(`view_next:${post.id}`)
-                            .setLabel('Next ➡️')
-                            .setStyle(ButtonStyle.Primary)
-                            .setDisabled(isLast)
-                    );
-                
-                replyOptions.components = [buttons];
+                const replyOptions = await generatePostMessage(post);
                 replyOptions.fetchReply = true;
                 
-                await interaction.editReply(replyOptions);
+                const message = await interaction.editReply(replyOptions);
+
+                const collector = message.createMessageComponentCollector({ time: 3_600_000 }); // 1 hour
+
+                collector.on('collect', async i => {
+                    if (i.user.id !== interaction.user.id) {
+                        await i.reply({ content: 'These buttons are not for you.', ephemeral: true });
+                        return;
+                    }
+
+                    const [action, currentPostId] = i.customId.split(':');
+                    
+                    if (action !== 'view_prev' && action !== 'view_next') return;
+
+                    await i.deferUpdate();
+
+                    const direction = action === 'view_next' ? 'next' : 'prev';
+                    const order = direction === 'next' ? 'id_asc' : 'id_desc';
+                    const operator = direction === 'next' ? '>' : '<';
+
+                    try {
+                        const newPostApiUrl = `${e6ai.baseUrl}/posts.json?tags=id:${operator}${currentPostId} order:${order}&limit=1`;
+                        console.log(`Fetching ${direction} post from: ${newPostApiUrl}`);
+
+                        const newPostResponse = await axios.get(newPostApiUrl, {
+                            headers: { 'User-Agent': e6ai.userAgent },
+                        });
+
+                        if (newPostResponse.status === 200 && newPostResponse.data.posts && newPostResponse.data.posts.length > 0) {
+                            const newPost = newPostResponse.data.posts[0];
+                            const newReplyOptions = await generatePostMessage(newPost);
+                            await i.editReply(newReplyOptions);
+                        } else {
+                            const originalMessage = i.message;
+                            const actionRow = ActionRowBuilder.from(originalMessage.components[0]);
+                            const buttonIndex = direction === 'next' ? 1 : 0;
+                            actionRow.components[buttonIndex].setDisabled(true);
+                            await i.editReply({ components: [actionRow] });
+                        }
+                    } catch (error) {
+                        console.error(`Error fetching ${direction} post:`, error.isAxiosError ? error.toJSON() : error);
+                        await i.followUp({ content: 'An error occurred while fetching the post.', ephemeral: true });
+                    }
+                });
+
+                collector.on('end', async () => {
+                    try {
+                        const finalMessage = await interaction.fetchReply();
+                        if (finalMessage.components.length > 0) {
+                            const actionRow = ActionRowBuilder.from(finalMessage.components[0]);
+                            actionRow.components.forEach(component => component.setDisabled(true));
+                            await interaction.editReply({ components: [actionRow] });
+                        }
+                    } catch (error) {
+                        if (error.code === 10008) { // Unknown Message
+                            console.log('Message was deleted, cannot disable buttons.');
+                        } else {
+                            console.error('Error disabling buttons after collector timeout:', error);
+                        }
+                    }
+                });
             } else if (response.status === 200) {
                  await interaction.editReply(`Post with ID ${postId} not found or no data returned.`);
             }
@@ -149,4 +214,4 @@ module.exports = {
             await interaction.editReply({ content: errorMessage, ephemeral: true });
         }
     },
-}; 
+};
