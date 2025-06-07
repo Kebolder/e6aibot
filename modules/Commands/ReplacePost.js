@@ -1,11 +1,9 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, InteractionContextType } = require('discord.js');
 const FormData = require('form-data');
 const axios = require('axios');
+const config = require('../../config.js');
 
-const E6AI_USERNAME = process.env.E6AI_USERNAME;
-const E6AI_API_KEY = process.env.E6AI_API_KEY;
-const E6AI_BASE_URL = 'http://localhost:3000';
-const ALLOWED_USER_IDS_REPLACE_CMD = process.env.ALLOWED_USER_IDS_REPLACE_CMD ? process.env.ALLOWED_USER_IDS_REPLACE_CMD.split(',') : [];
+const { e6ai, replaceCommandAllowedUserIds } = config;
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -22,11 +20,11 @@ module.exports = {
         .addStringOption(option =>
             option.setName('reason')
                 .setDescription('The reason for the replacement (min 5 characters).')
-                .setRequired(true)),
+                .setRequired(true))
+        .setContexts([InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel]),
     async execute(interaction) {
-        // Permission Check
-        if (ALLOWED_USER_IDS_REPLACE_CMD.length > 0 && !ALLOWED_USER_IDS_REPLACE_CMD.includes(interaction.user.id)) {
-            await interaction.reply({ content: 'You do not have permission to use this command.', ephemeral: true });
+        if (replaceCommandAllowedUserIds.length > 0 && !replaceCommandAllowedUserIds.includes(interaction.user.id)) {
+            await interaction.reply({ content: 'You are not authorized to use this command.', ephemeral: true });
             return;
         }
 
@@ -44,7 +42,7 @@ module.exports = {
             return;
         }
 
-        if (!E6AI_USERNAME || !E6AI_API_KEY) {
+        if (!e6ai.username || !e6ai.apiKey) {
             await interaction.reply({ content: 'Bot owner has not configured E6AI_USERNAME or E6AI_API_KEY in the .env file.', ephemeral: true });
             console.error('Missing E6AI_USERNAME or E6AI_API_KEY in .env');
             return;
@@ -62,7 +60,7 @@ module.exports = {
             });
             formData.append('post_replacement[reason]', reason);
 
-            const apiUrl = `${E6AI_BASE_URL}/post_replacements.json?post_id=${postId}&login=${E6AI_USERNAME}&api_key=${E6AI_API_KEY}`;
+            const apiUrl = `${e6ai.baseUrl}/post_replacements.json?post_id=${postId}&login=${e6ai.username}&api_key=${e6ai.apiKey}`;
             console.log(`Submitting replacement to: ${apiUrl}`);
             console.log(`With Reason: ${reason}, File: ${imageAttachment.name}`);
 
@@ -72,22 +70,20 @@ module.exports = {
                 {
                     headers: {
                         ...formData.getHeaders(),
-                        'User-Agent': `ReplacmentBot/1.0 (by ${E6AI_USERNAME} on e6AI)`,
+                        'User-Agent': e6ai.userAgent,
                     },
                 }
             );
 
             if (response.status === 200 || response.status === 201 || response.status === 204 ) {
-                if (response.data && response.data.location) {
-                    await interaction.editReply(`Successfully submitted replacement for post ID ${postId}. New location: ${response.data.location}`);
-                } else if (response.data && response.data.success === true) {
-                    await interaction.editReply(`Successfully submitted replacement for post ID ${postId}.`);
-                } else if (response.data && response.data.id) {
-                     await interaction.editReply(`Successfully submitted replacement for post ID ${postId}. Replacement/Post ID: ${response.data.id}`);
-                } else {
-                    await interaction.editReply(`Successfully submitted replacement for post ID ${postId} (Status: ${response.status}). Check details if available.`);
-                    console.log('API Response on success:', response.data);
-                }
+                const successEmbed = new EmbedBuilder()
+                    .setColor(0x33cc33)
+                    .setTitle(`Post #${postId} has been replaced!`)
+                    .setURL(`${e6ai.baseUrl}/posts/${postId}`)
+                    .addFields({ name: 'Date Replaced', value: new Date().toLocaleString() })
+                    .setImage(imageAttachment.url);
+                
+                await interaction.editReply({ embeds: [successEmbed] });
             } else if (response.data && response.data.reason) {
                await interaction.editReply(`Failed to replace post ID ${postId}. API Reason: ${response.data.reason}`);
             } else if (response.data && response.data.message) {
