@@ -51,6 +51,23 @@ module.exports = {
         await interaction.deferReply();
 
         try {
+            // Fetch old post data to get the old image URL
+            const postInfoUrl = `${e6ai.baseUrl}/posts/${postId}.json`;
+            const postInfoResponse = await axios.get(postInfoUrl, {
+                headers: { 'User-Agent': e6ai.userAgent },
+                params: {
+                    login: e6ai.username,
+                    api_key: e6ai.apiKey,
+                },
+            });
+
+            const oldImageUrl = postInfoResponse?.data?.post?.file?.url;
+
+            if (!oldImageUrl) {
+                await interaction.editReply({ content: 'Could not fetch the old image. The post might not exist, the API response was not as expected, or the bot may not have permission to view it.', ephemeral: true });
+                return;
+            }
+
             const imageResponse = await axios.get(imageAttachment.url, { responseType: 'stream' });
 
             const formData = new FormData();
@@ -76,14 +93,21 @@ module.exports = {
             );
 
             if (response.status === 200 || response.status === 201 || response.status === 204 ) {
-                const successEmbed = new EmbedBuilder()
-                    .setColor(0x33cc33)
-                    .setTitle(`Post #${postId} has been replaced!`)
+                const oldEmbed = new EmbedBuilder()
+                    .setColor(0xcc3333)
+                    .setTitle('OLD')
                     .setURL(`${e6ai.baseUrl}/posts/${postId}`)
-                    .addFields({ name: 'Date Replaced', value: new Date().toLocaleString() })
+                    .setImage(oldImageUrl);
+
+                const newEmbed = new EmbedBuilder()
+                    .setColor(0x33cc33)
+                    .setTitle('NEW')
+                    .setURL(`${e6ai.baseUrl}/posts/${postId}`)
+                    .setDescription(`Post #${postId} has been replaced!`)
+                    .addFields({ name: 'Reason', value: reason })
                     .setImage(imageAttachment.url);
                 
-                await interaction.editReply({ embeds: [successEmbed] });
+                await interaction.editReply({ embeds: [oldEmbed, newEmbed] });
             } else if (response.data && response.data.reason) {
                await interaction.editReply(`Failed to replace post ID ${postId}. API Reason: ${response.data.reason}`);
             } else if (response.data && response.data.message) {

@@ -11,12 +11,19 @@ module.exports = {
         userAgent: `E6aiBot/${botVersion} (by Slop on e6AI)`,
     },
     replaceCommandAllowedUserIds: [
-        process.env.OWNER_ID,
-        '439174124816957450',
-        '252705915365621762',
-        '1251068622454128721',
-        '1101045525274435635',
-        '1354090683912290416',
+        process.env.OWNER_ID, // Me
+        '439174124816957450', // Also Me
+        '252705915365621762', // Cut
+        '1251068622454128721', // Jello
+        '1101045525274435635', // Sawmill
+        '1354090683912290416', // Grid
+        "118879458957459456", // Mlem
+        "174051210846797824", // Hydra
+        "90532903322148864", // Draco
+        "336999080704081921", // Puppy
+        "1098999501475291196", // Cinder Block
+        
+        
     ],
     // We can add other configurations here later
 }; 
