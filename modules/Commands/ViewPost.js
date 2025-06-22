@@ -22,6 +22,19 @@ function getStatus(flags) {
     return 'Active';
 }
 
+function formatDescription(text) {
+    if (!text) return 'No description provided.';
+
+    const formattedText = text
+        .replace(/\[b\]\[i\]([\s\S]*?)\[\/i\]\[\/b\]/gi, '***$1***')
+        .replace(/\[i\]\[b\]([\s\S]*?)\[\/b\]\[\/i\]/gi, '***$1***')
+        .replace(/\[b\]([\s\S]*?)\[\/b\]/gi, '**$1**')
+        .replace(/\[i\]([\s\S]*?)\[\/i\]/gi, '*$1*')
+        .replace(/\[.*?\]/g, '');
+    
+    return formattedText;
+}
+
 async function generatePostMessage(post) {
     const status = getStatus(post.flags);
     let color;
@@ -37,7 +50,7 @@ async function generatePostMessage(post) {
         .setColor(color)
         .setTitle(`Post #${post.id}`)
         .setURL(`${e6ai.baseUrl}/posts/${post.id}`)
-        .setDescription(post.description || 'No description provided.')
+        .setDescription(formatDescription(post.description))
         .addFields(
             { name: 'Likes', value: String(post.score.total), inline: true },
             { name: 'Favorites', value: String(post.fav_count), inline: true },
