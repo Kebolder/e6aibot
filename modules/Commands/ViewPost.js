@@ -55,7 +55,11 @@ async function generatePostMessage(post) {
     if (post.file && post.file.url) {
         const fileName = post.file.url.split('/').pop();
         const attachment = new AttachmentBuilder(post.file.url, { name: fileName });
-        embed.setImage(`attachment://${fileName}`);
+        
+        if (['png', 'jpg', 'jpeg', 'gif'].includes(post.file.ext.toLowerCase())) {
+            embed.setImage(`attachment://${fileName}`);
+        }
+        
         replyOptions.files = [attachment];
     }
 
