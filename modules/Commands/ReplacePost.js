@@ -101,10 +101,8 @@ module.exports = {
 
                 const newEmbed = new EmbedBuilder()
                     .setColor(0x33cc33)
-                    .setTitle('NEW')
+                    .setTitle('REPLACEMENT')
                     .setURL(`${e6ai.baseUrl}/posts/${postId}`)
-                    .setDescription(`Post #${postId} has been replaced!`)
-                    .addFields({ name: 'Reason', value: reason })
                     .setImage(imageAttachment.url);
                 
                 await interaction.editReply({ embeds: [oldEmbed, newEmbed] });

@@ -9,6 +9,7 @@ const DMAIL_CHECK_INTERVAL_MS = 15000; // 15 seconds
 // This set will store the IDs of dmails that have already been processed
 // to prevent duplicate notifications during a single run.
 const processedDmailIds = new Set();
+let isCheckingDmail = false;
 
 /**
  * Marks a dmail as read on e6ai.
@@ -39,12 +40,18 @@ async function markDmailAsRead(dmailId) {
  * @param {import('discord.js').Client} client The Discord client instance.
  */
 async function checkDmail(client) {
-    if (!e6ai.username || !e6ai.apiKey || !e6ai.botE6aiId) {
-        console.log('[DMAIL] E6AI credentials or bot user ID not provided in config. Skipping dmail check.');
+    if (isCheckingDmail) {
+        console.log('[DMAIL] A dmail check is already in progress. Skipping this interval.');
         return;
     }
 
+    isCheckingDmail = true;
     try {
+        if (!e6ai.username || !e6ai.apiKey || !e6ai.botE6aiId) {
+            console.log('[DMAIL] E6AI credentials or bot user ID not provided in config. Skipping dmail check.');
+            return;
+        }
+
         // Step 1: Directly fetch all dmails.
         const dmailUrl = `${e6ai.baseUrl}/dmails.json`;
         const dmailResponse = await axios.get(dmailUrl, {
@@ -260,6 +267,8 @@ If you continue to have issues, you can reach out to my [b]"owner here":https://
 
     } catch (error) {
         console.error('[DMAIL] Error checking dmail:', error.isAxiosError ? error.message : error);
+    } finally {
+        isCheckingDmail = false;
     }
 }
 
