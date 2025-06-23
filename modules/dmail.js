@@ -2,6 +2,7 @@ const axios = require('axios');
 const { EmbedBuilder } = require('discord.js');
 const FormData = require('form-data');
 const { e6ai, ownerId } = require('../config.js');
+const { generatePostMessage, getStatus } = require('./postEmbed.js');
 
 const DMAIL_CHECK_INTERVAL_MS = 15000; // 15 seconds
 
@@ -84,7 +85,15 @@ async function checkDmail(client) {
                             const formData = new FormData();
                             formData.append('dmail[to_id]', dmail.from_id);
                             formData.append('dmail[title]', `Re: ${dmail.title}`);
-                            formData.append('dmail[body]', `This is an automated message. I can only process dmails with the exact title 'Replacement'. Please correct the title and resend your request.`);
+                            formData.append('dmail[body]', `h5. Invalid Command
+
+[quote]
+[b]Hello![/b] It seems the command in your message's title is not valid.
+
+I am a bot, and my commands are based on the Dmail [b]title[/b]. Please check the "HOW TO USE" section on my [b]"About Me":https://e6ai.net/users/42811[/b] page for a list of valid commands and their required formats.
+
+If you believe this is an error, please feel free to contact my [b]"owner":https://e6ai.net/users/26091[/b].
+[/quote]`);
                             
                             await axios.post(replyUrl, formData, {
                                 params: { login: e6ai.username, api_key: e6ai.apiKey },
@@ -107,19 +116,73 @@ async function checkDmail(client) {
                         continue;
                     }
 
-                    console.log('[DMAIL] New replacement request received:', dmail);
+                    const body = dmail.body || '';
+                    const postLinkRegex = /^Post:\s*(https?:\/\/e6ai\.net\/posts\/(\d+))/im;
+                    const newImageRegex = /^New Image:\s*(https?:\/\/[^\s]+)/im;
 
-                    // Extract the first number from the body and assume it's the Post ID.
-                    const postIdMatch = dmail.body?.match(/\d+/);
-                    const postId = postIdMatch ? postIdMatch[0] : null;
-                    const postLink = postId ? `${e6ai.baseUrl}posts/${postId}` : 'Not provided in body';
+                    const postLinkMatch = body.match(postLinkRegex);
+                    const newImageMatch = body.match(newImageRegex);
+
+                    const postId = postLinkMatch ? postLinkMatch[2] : null;
+                    const postLink = postLinkMatch ? postLinkMatch[1] : null;
+                    const replacementLink = newImageMatch ? newImageMatch[1] : null;
+
+                    if (!postId || !replacementLink) {
+                        console.log(`[DMAIL] Invalid replacement request from ${dmail.from_id}. Missing post or replacement link.`);
+                        await markDmailAsRead(dmail.id);
+
+                        try {
+                            const replyUrl = `${e6ai.baseUrl}/dmails.json`;
+                            const formData = new FormData();
+                            formData.append('dmail[to_id]', dmail.from_id);
+                            formData.append('dmail[title]', `Re: ${dmail.title}`);
+                            formData.append('dmail[body]', `h5. Invalid Replacement Request
+
+[quote]
+[b]Oops![/b] It looks like your replacement request wasn't formatted correctly.
+
+To successfully request a replacement, please make sure the body of your message follows this exact format:
+
+[quote]
+Post: [i]REPLACE_WITH_E6AI_POST_LINK[/i]
+New Image: [i]REPLACE_WITH_DIRECT_IMAGE_LINK[/i]
+[/quote]
+
+* The "Post" link [u]must[/u] be a valid link to a post on e6ai.net.
+* The "New Image" link [u]must[/u] be a direct link to an image file.
+
+For more detailed instructions and a helpful example, please check out the "HOW TO USE" section on my [b] "About Me":https://e6ai.net/users/42811 [/b] page.
+
+If you continue to have issues, you can reach out to my [b]"owner here":https://e6ai.net/users/26091[/b].
+[/quote]`);
+                            
+                            await axios.post(replyUrl, formData, {
+                                params: { login: e6ai.username, api_key: e6ai.apiKey },
+                                headers: { 
+                                    ...formData.getHeaders(),
+                                    'User-Agent': e6ai.userAgent 
+                                }
+                            });
+                        } catch (error) {
+                            if (error.response && error.response.status === 406) {
+                                console.log(`[DMAIL] Sent invalid replacement reply to ${dmail.from_id} (expected 406).`);
+                            } else {
+                                console.error(`[DMAIL] Failed to send invalid replacement reply to ${dmail.from_id}:`, error.message);
+                            }
+                        }
+                        
+                        processedDmailIds.add(dmail.id);
+                        continue;
+                    }
+
+                    console.log('[DMAIL] New replacement request received:', dmail);
 
                     const embed = new EmbedBuilder()
                         .setTitle('REPLACEMENT REQUEST')
                         .setDescription(dmail.body || '*No content*')
                         .addFields(
-                            { name: 'Post ID:', value: postLink, inline: true },
-                            { name: '\u200B', value: '\u200B', inline: true }
+                            { name: 'Post to Replace', value: `[View Post](${postLink})` },
+                            { name: 'New Image Link', value: replacementLink }
                         )
                         .setColor('#fbfe4d')
                         .setTimestamp(new Date(dmail.created_at));
@@ -154,6 +217,28 @@ async function checkDmail(client) {
 
                     if (channel && channel.isTextBased()) {
                         await channel.send({ embeds: [embed] });
+
+                        try {
+                            const postApiUrl = `${e6ai.baseUrl}/posts.json?tags=id:${postId}`;
+                            const postResponse = await axios.get(postApiUrl, {
+                                headers: { 'User-Agent': e6ai.userAgent },
+                            });
+
+                            if (postResponse.status === 200 && postResponse.data.posts && postResponse.data.posts.length > 0) {
+                                const post = postResponse.data.posts[0];
+                                if (getStatus(post.flags) !== 'Deleted') {
+                                    const postMessage = await generatePostMessage(post, false);
+                                    await channel.send(postMessage);
+                                } else {
+                                    await channel.send(`The post in the replacement request (\`ID: ${postId}\`) has been deleted.`);
+                                }
+                            } else {
+                                await channel.send(`The post in the replacement request (\`ID: ${postId}\`) could not be found.`);
+                            }
+                        } catch (error) {
+                            console.error(`[DMAIL] Failed to fetch and display post ${postId}:`, error.message);
+                            await channel.send(`There was an error trying to display post \`ID: ${postId}\`.`);
+                        }
                     } else {
                         console.error(`[DMAIL] Could not find channel with ID ${targetChannelId} or it's not a text channel.`);
                         const owner = await client.users.fetch(ownerId).catch(() => null);
