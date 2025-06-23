@@ -9,22 +9,31 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.commands = new Collection();
 
 const foldersPath = path.join(__dirname, 'modules');
-const commandFolders = fs.readdirSync(foldersPath);
+const moduleFilesAndFolders = fs.readdirSync(foldersPath);
 
-for (const folder of commandFolders) {
-	const commandsPath = path.join(foldersPath, folder);
-	// Check if commandsPath is a directory before reading it
-	if (fs.statSync(commandsPath).isDirectory()) {
-		const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+for (const name of moduleFilesAndFolders) {
+	const modulePath = path.join(foldersPath, name);
+	const stat = fs.statSync(modulePath);
+
+	if (stat.isDirectory()) {
+		// This is the existing command loading logic for subdirectories
+		const commandFiles = fs.readdirSync(modulePath).filter(file => file.endsWith('.js'));
 		for (const file of commandFiles) {
-			const filePath = path.join(commandsPath, file);
+			const filePath = path.join(modulePath, file);
 			const command = require(filePath);
 			if ('data' in command && 'execute' in command) {
 				client.commands.set(command.data.name, command);
-				console.log(`[INFO] Loaded command ${command.data.name} from ${folder}/${file}`);
+				console.log(`[INFO] Loaded command ${command.data.name} from ${name}/${file}`);
 			} else {
 				console.log(`[WARNING] The command at ${filePath} is missing a required "data" or "execute" property.`);
 			}
+		}
+	} else if (name.endsWith('.js')) {
+		// This is the new logic for background modules in the root of /modules
+		const module = require(modulePath);
+		if ('init' in module) {
+			module.init(client);
+			console.log(`[INFO] Initialized module from ${name}`);
 		}
 	}
 }
