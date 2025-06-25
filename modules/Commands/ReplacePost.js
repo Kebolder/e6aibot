@@ -21,6 +21,10 @@ module.exports = {
             option.setName('reason')
                 .setDescription('The reason for the replacement (min 5 characters).')
                 .setRequired(true))
+        .addStringOption(option =>
+            option.setName('source')
+                .setDescription('The new source URL for the post.')
+                .setRequired(false))
         .setContexts([InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel]),
     async execute(interaction) {
         if (replaceCommandAllowedUserIds.length > 0 && !replaceCommandAllowedUserIds.includes(interaction.user.id)) {
@@ -31,6 +35,7 @@ module.exports = {
         const postId = interaction.options.getString('post_id');
         const imageAttachment = interaction.options.getAttachment('image');
         let reason = interaction.options.getString('reason');
+        const source = interaction.options.getString('source');
 
         if (reason.length < 5) {
             await interaction.reply({ content: 'The reason for replacement must be at least 5 characters long.', ephemeral: true });
@@ -76,6 +81,9 @@ module.exports = {
                 contentType: imageAttachment.contentType 
             });
             formData.append('post_replacement[reason]', reason);
+            if (source) {
+                formData.append('post_replacement[source]', source);
+            }
 
             const apiUrl = `${e6ai.baseUrl}/post_replacements.json?post_id=${postId}&login=${e6ai.username}&api_key=${e6ai.apiKey}`;
             console.log(`Submitting replacement to: ${apiUrl}`);
@@ -95,7 +103,7 @@ module.exports = {
             if (response.status === 200 || response.status === 201 || response.status === 204 ) {
                 const oldEmbed = new EmbedBuilder()
                     .setColor(0xcc3333)
-                    .setTitle('OLD')
+                    .setTitle('OLD IMAGE')
                     .setURL(`${e6ai.baseUrl}/posts/${postId}`)
                     .setImage(oldImageUrl);
 
@@ -105,7 +113,8 @@ module.exports = {
                     .setURL(`${e6ai.baseUrl}/posts/${postId}`)
                     .setImage(imageAttachment.url);
                 
-                await interaction.editReply({ embeds: [oldEmbed, newEmbed] });
+                await interaction.editReply({ embeds: [oldEmbed] });
+                await interaction.followUp({ embeds: [newEmbed] });
             } else if (response.data && response.data.reason) {
                await interaction.editReply(`Failed to replace post ID ${postId}. API Reason: ${response.data.reason}`);
             } else if (response.data && response.data.message) {
