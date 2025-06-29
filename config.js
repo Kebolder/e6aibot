@@ -8,7 +8,7 @@ module.exports = {
         username: process.env.E6AI_USERNAME,
         apiKey: process.env.E6AI_API_KEY,
         botE6aiId: process.env.E6AI_BOT_USER_ID,
-        baseUrl: process.env.E6AI_BASE_URL || 'https://e6ai.net/',
+        baseUrl: (process.env.E6AI_BASE_URL || 'https://e6ai.net/').replace(/\/$/, ""),
         userAgent: `E6aiBot/${botVersion} (by Slop on e6AI)`,
     },
     replaceCommandAllowedUserIds: [

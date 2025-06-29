@@ -25,6 +25,10 @@ module.exports = {
             option.setName('source')
                 .setDescription('The new source URL for the post.')
                 .setRequired(false))
+        .addBooleanOption(option =>
+            option.setName('undelete')
+                .setDescription('Set to true to undelete the post after replacement.')
+                .setRequired(false))
         .setContexts([InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel]),
     async execute(interaction) {
         if (replaceCommandAllowedUserIds.length > 0 && !replaceCommandAllowedUserIds.includes(interaction.user.id)) {
@@ -36,6 +40,7 @@ module.exports = {
         const imageAttachment = interaction.options.getAttachment('image');
         let reason = interaction.options.getString('reason');
         const source = interaction.options.getString('source');
+        const undelete = interaction.options.getBoolean('undelete') ?? false;
 
         if (reason.length < 5) {
             await interaction.reply({ content: 'The reason for replacement must be at least 5 characters long.', ephemeral: true });
@@ -115,6 +120,25 @@ module.exports = {
                 
                 await interaction.editReply({ embeds: [oldEmbed] });
                 await interaction.followUp({ embeds: [newEmbed] });
+
+                if (undelete) {
+                    try {
+                        const undeleteUrl = `${e6ai.baseUrl}/moderator/post/posts/${postId}/undelete.json`;
+                        await axios.post(undeleteUrl, null, {
+                            params: {
+                                login: e6ai.username,
+                                api_key: e6ai.apiKey,
+                            },
+                            headers: {
+                                'User-Agent': e6ai.userAgent,
+                            },
+                        });
+                        await interaction.followUp({ content: `Post ${postId} has also been undeleted.`, ephemeral: true });
+                    } catch (undeleteError) {
+                        console.error(`Failed to undelete post ${postId}:`, undeleteError);
+                        await interaction.followUp({ content: `Replacement was successful, but failed to undelete post ${postId}. You may need to do it manually.`, ephemeral: true });
+                    }
+                }
             } else if (response.data && response.data.reason) {
                await interaction.editReply(`Failed to replace post ID ${postId}. API Reason: ${response.data.reason}`);
             } else if (response.data && response.data.message) {

@@ -226,21 +226,26 @@ If you continue to have issues, you can reach out to my [b]"owner here":https://
                         await channel.send({ embeds: [embed] });
 
                         try {
-                            const postApiUrl = `${e6ai.baseUrl}/posts.json?tags=id:${postId}`;
-                            const postResponse = await axios.get(postApiUrl, {
+                            let postApiUrl = `${e6ai.baseUrl}/posts.json?tags=id:${postId}`;
+                             let postResponse = await axios.get(postApiUrl, {
                                 headers: { 'User-Agent': e6ai.userAgent },
                             });
 
+                            if (postResponse.status === 200 && (!postResponse.data.posts || postResponse.data.posts.length === 0)) {
+                                console.log(`[DMAIL] Post ${postId} not found publicly, trying with authentication.`);
+                                postApiUrl = `${e6ai.baseUrl}/posts.json?tags=id:${postId}+status:any&login=${e6ai.username}&api_key=${e6ai.apiKey}`;
+                                postResponse = await axios.get(postApiUrl, {
+                                    headers: { 'User-Agent': e6ai.userAgent },
+                                });
+                            }
+                            
+
                             if (postResponse.status === 200 && postResponse.data.posts && postResponse.data.posts.length > 0) {
                                 const post = postResponse.data.posts[0];
-                                if (getStatus(post.flags) !== 'Deleted') {
-                                    const postMessage = await generatePostMessage(post, false);
-                                    await channel.send(postMessage);
-                                } else {
-                                    await channel.send(`The post in the replacement request (\`ID: ${postId}\`) has been deleted.`);
-                                }
+                                const postMessage = await generatePostMessage(post, false);
+                                await channel.send(postMessage);
                             } else {
-                                await channel.send(`The post in the replacement request (\`ID: ${postId}\`) could not be found.`);
+                                await channel.send(`The post in the replacement request (\`ID: ${postId}\`) could not be found, even with janitor permissions.`);
                             }
                         } catch (error) {
                             console.error(`[DMAIL] Failed to fetch and display post ${postId}:`, error.message);

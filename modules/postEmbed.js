@@ -61,7 +61,8 @@ async function generatePostMessage(post, withButtons = true) {
 
     const replyOptions = { embeds: [embed], files: [] };
     if (post.file && post.file.url) {
-        const fileName = post.file.url.split('/').pop();
+        const url = new URL(post.file.url);
+        const fileName = url.pathname.split('/').pop();
         const attachment = new AttachmentBuilder(post.file.url, { name: fileName });
         
         if (['png', 'jpg', 'jpeg', 'gif'].includes(post.file.ext.toLowerCase())) {
@@ -72,19 +73,27 @@ async function generatePostMessage(post, withButtons = true) {
     }
 
     if (withButtons) {
-        const isFirstApiUrl = `${e6ai.baseUrl}/posts.json?tags=id:<${post.id} order:id_desc&limit=1`;
-        const isLastApiUrl = `${e6ai.baseUrl}/posts.json?tags=id:>${post.id} order:id_asc&limit=1`;
+        const buttons = new ActionRowBuilder();
+        if (status === 'Deleted') {
+            buttons.addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`undelete:${post.id}`)
+                    .setLabel('✅ Undelete')
+                    .setStyle(ButtonStyle.Success)
+            );
+        } else {
+            const isFirstApiUrl = `${e6ai.baseUrl}/posts.json?tags=id:<${post.id} order:id_desc&limit=1`;
+            const isLastApiUrl = `${e6ai.baseUrl}/posts.json?tags=id:>${post.id} order:id_asc&limit=1`;
 
-        const [isFirstResponse, isLastResponse] = await Promise.all([
-            axios.get(isFirstApiUrl, { headers: { 'User-Agent': e6ai.userAgent } }),
-            axios.get(isLastApiUrl, { headers: { 'User-Agent': e6ai.userAgent } })
-        ]);
+            const [isFirstResponse, isLastResponse] = await Promise.all([
+                axios.get(isFirstApiUrl, { headers: { 'User-Agent': e6ai.userAgent } }),
+                axios.get(isLastApiUrl, { headers: { 'User-Agent': e6ai.userAgent } })
+            ]);
 
-        const isFirst = !(isFirstResponse.status === 200 && isFirstResponse.data.posts && isFirstResponse.data.posts.length > 0);
-        const isLast = !(isLastResponse.status === 200 && isLastResponse.data.posts && isLastResponse.data.posts.length > 0);
-        
-        const buttons = new ActionRowBuilder()
-            .addComponents(
+            const isFirst = !(isFirstResponse.status === 200 && isFirstResponse.data.posts && isFirstResponse.data.posts.length > 0);
+            const isLast = !(isLastResponse.status === 200 && isLastResponse.data.posts && isLastResponse.data.posts.length > 0);
+            
+            buttons.addComponents(
                 new ButtonBuilder()
                     .setCustomId(`view_prev:${post.id}`)
                     .setLabel('⬅️ Prev')
@@ -96,7 +105,7 @@ async function generatePostMessage(post, withButtons = true) {
                     .setStyle(ButtonStyle.Primary)
                     .setDisabled(isLast)
             );
-        
+        }
         replyOptions.components = [buttons];
     }
 
