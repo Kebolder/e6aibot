@@ -29,6 +29,10 @@ module.exports = {
             option.setName('undelete')
                 .setDescription('Set to true to undelete the post after replacement.')
                 .setRequired(false))
+        .addBooleanOption(option =>
+            option.setName('as_pending')
+                .setDescription('Submit the replacement as pending. (Default: false)')
+                .setRequired(false))
         .setContexts([InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel]),
     async execute(interaction) {
         if (replaceCommandAllowedUserIds.length > 0 && !replaceCommandAllowedUserIds.includes(interaction.user.id)) {
@@ -38,9 +42,10 @@ module.exports = {
 
         const postId = interaction.options.getString('post_id');
         const imageAttachment = interaction.options.getAttachment('image');
-        let reason = interaction.options.getString('reason');
+        const reason = interaction.options.getString('reason');
         const source = interaction.options.getString('source');
         const undelete = interaction.options.getBoolean('undelete') ?? false;
+        const asPending = interaction.options.getBoolean('as_pending') ?? false;
 
         if (reason.length < 5) {
             await interaction.reply({ content: 'The reason for replacement must be at least 5 characters long.', ephemeral: true });
@@ -89,6 +94,7 @@ module.exports = {
             if (source) {
                 formData.append('post_replacement[source]', source);
             }
+            formData.append('post_replacement[as_pending]', asPending.toString());
 
             const apiUrl = `${e6ai.baseUrl}/post_replacements.json?post_id=${postId}&login=${e6ai.username}&api_key=${e6ai.apiKey}`;
             console.log(`Submitting replacement to: ${apiUrl}`);

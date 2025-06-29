@@ -206,7 +206,7 @@ If you continue to have issues, you can reach out to my [b]"owner here":https://
                             if (sender?.name) {
                                 embed.setAuthor({ 
                                     name: `Message from: ${sender.name}`, 
-                                    url: `${e6ai.baseUrl}users/${dmail.from_id}`
+                                    url: `${e6ai.baseUrl}/users/${dmail.from_id}`
                                 });
                             } else {
                                 embed.setAuthor({ name: `Message from: User ID ${dmail.from_id}` });
