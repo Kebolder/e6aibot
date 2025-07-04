@@ -15,7 +15,7 @@ module.exports = {
                 .setRequired(true))
         .addAttachmentOption(option =>
             option.setName('image')
-                .setDescription('The new image to upload.')
+                .setDescription('The new image or video to upload.')
                 .setRequired(true))
         .addStringOption(option =>
             option.setName('reason')
@@ -52,8 +52,8 @@ module.exports = {
             return;
         }
 
-        if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(imageAttachment.contentType)) {
-            await interaction.reply({ content: 'Please upload a valid image type (PNG, JPG, GIF, WEBP).', ephemeral: true });
+        if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'video/mp4', 'video/webm'].includes(imageAttachment.contentType)) {
+            await interaction.reply({ content: 'Please upload a valid file type (PNG, JPG, GIF, WEBP, MP4, WEBM).', ephemeral: true });
             return;
         }
 
@@ -118,14 +118,28 @@ module.exports = {
                     .setURL(`${e6ai.baseUrl}/posts/${postId}`)
                     .setImage(oldImageUrl);
 
-                const newEmbed = new EmbedBuilder()
-                    .setColor(0x33cc33)
-                    .setTitle('REPLACEMENT')
-                    .setURL(`${e6ai.baseUrl}/posts/${postId}`)
-                    .setImage(imageAttachment.url);
-                
                 await interaction.editReply({ embeds: [oldEmbed] });
-                await interaction.followUp({ embeds: [newEmbed] });
+                
+                const isVideo = imageAttachment.contentType.startsWith('video/');
+
+                if (isVideo) {
+                    await interaction.followUp({ 
+                        content: `**REPLACEMENT:**\n${imageAttachment.url}`,
+                        embeds: [new EmbedBuilder()
+                            .setColor(0x33cc33)
+                            .setTitle('REPLACEMENT SUCCESSFUL')
+                            .setURL(`${e6ai.baseUrl}/posts/${postId}`)
+                            .setDescription(`The new file has been uploaded for post ${postId}.`)
+                        ]
+                    });
+                } else {
+                    const newEmbed = new EmbedBuilder()
+                        .setColor(0x33cc33)
+                        .setTitle('REPLACEMENT')
+                        .setURL(`${e6ai.baseUrl}/posts/${postId}`)
+                        .setImage(imageAttachment.url);
+                    await interaction.followUp({ embeds: [newEmbed] });
+                }
 
                 if (undelete) {
                     try {
