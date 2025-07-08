@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { e6ai, ownerId } = require('../config.js');
 const { generatePostMessage, getStatus } = require('./postEmbed.js');
+const invalidCommandResponse = require('./dmail_responses/invalidCommand.js');
 
 const DMAIL_CHECK_INTERVAL_MS = 15000;
 
@@ -104,16 +105,8 @@ async function checkDmail(client) {
                             const replyUrl = `${e6ai.baseUrl}/dmails.json`;
                             const formData = new FormData();
                             formData.append('dmail[to_id]', dmail.from_id);
-                            formData.append('dmail[title]', `Re: ${dmail.title}`);
-                            formData.append('dmail[body]', `h5. Invalid Command
-
-[quote]
-[b]Hello![/b] It seems the command in your message's title is not valid.
-
-I am a bot, and my commands are based on the Dmail [b]title[/b]. Please check the "HOW TO USE" section on my [b]"About Me":https://e6ai.net/users/42811[/b] page for a list of valid commands and their required formats.
-
-If you believe this is an error, please feel free to contact my [b]"owner":https://e6ai.net/users/26091[/b].
-[/quote]`);
+                            formData.append('dmail[title]', invalidCommandResponse.title(dmail.title));
+                            formData.append('dmail[body]', invalidCommandResponse.body);
                             
                             await axios.post(replyUrl, formData, {
                                 params: { login: e6ai.username, api_key: e6ai.apiKey },

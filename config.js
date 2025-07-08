@@ -14,7 +14,6 @@ module.exports = {
     replaceCommandAllowedUserIds: [
         process.env.OWNER_ID, // Me
         '439174124816957450', // Also Me
-        '252705915365621762', // Cut
         '1251068622454128721', // Jello
         '1101045525274435635', // Sawmill
         '1354090683912290416', // Grid

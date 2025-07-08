@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Client, Collection, Events, GatewayIntentBits } = require('discord.js');
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessageTyping] });
 
 client.commands = new Collection();
 
@@ -14,6 +14,8 @@ const moduleFilesAndFolders = fs.readdirSync(foldersPath);
 for (const name of moduleFilesAndFolders) {
 	const modulePath = path.join(foldersPath, name);
 	const stat = fs.statSync(modulePath);
+
+	if (name === 'dmail_commands' || name === 'dmail_responses') continue;
 
 	if (stat.isDirectory()) {
 		// This is the existing command loading logic for subdirectories
