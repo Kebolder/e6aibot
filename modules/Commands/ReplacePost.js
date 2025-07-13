@@ -1,9 +1,113 @@
-const { SlashCommandBuilder, EmbedBuilder, InteractionContextType } = require('discord.js');
+const { SlashCommandBuilder, ActionRowBuilder, EmbedBuilder, InteractionContextType } = require('discord.js');
 const FormData = require('form-data');
 const axios = require('axios');
 const config = require('../../config.js');
+const { generatePostMessage } = require('../postEmbed.js');
 
-const { e6ai, replaceCommandAllowedUserIds } = config;
+const { e6ai, janitorUserIds } = config;
+
+async function setupPostCollector(message, interaction) {
+    const collector = message.createMessageComponentCollector({ time: 3_600_000 }); // 1 hour
+
+    collector.on('collect', async i => {
+        const [action, currentPostId] = i.customId.split(':');
+        
+        if (action === 'undelete') {
+            if (!janitorUserIds.includes(i.user.id)) {
+                await i.reply({ content: 'You are not authorized to use this button.', ephemeral: true });
+                return;
+            }
+
+            await i.deferUpdate();
+            try {
+                const undeleteUrl = `${e6ai.baseUrl}/moderator/post/posts/${currentPostId}/undelete.json`;
+                await axios.post(undeleteUrl, null, {
+                    params: { login: e6ai.username, api_key: e6ai.apiKey },
+                    headers: { 'User-Agent': e6ai.userAgent },
+                });
+
+                // Wait for 2 seconds to allow the server to process the undeletion
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                const refetchApiUrl = `${e6ai.baseUrl}/posts.json?tags=id:${currentPostId}`;
+                const refetchResponse = await axios.get(refetchApiUrl, {
+                    headers: { 'User-Agent': e6ai.userAgent },
+                });
+
+                if (refetchResponse.status === 200 && refetchResponse.data.posts.length > 0) {
+                    const updatedPost = refetchResponse.data.posts[0];
+                    const newReplyOptions = await generatePostMessage(updatedPost);
+                    
+                    await i.message.delete();
+                    const newMessage = await i.channel.send(newReplyOptions);
+                    setupPostCollector(newMessage, interaction);
+                } else {
+                    await i.followUp({ content: 'Successfully undeleted, but could not refresh the post message.', ephemeral: true });
+                }
+            } catch (error) {
+                console.error(`Error undeleting post ${currentPostId}:`, error.isAxiosError ? error.toJSON() : error);
+                await i.followUp({ content: 'An error occurred while trying to undelete the post.', ephemeral: true });
+            }
+            return;
+        }
+        
+        if (i.user.id !== interaction.user.id) {
+            await i.reply({ content: 'These buttons are not for you.', ephemeral: true });
+            return;
+        }
+
+        if (action !== 'view_prev' && action !== 'view_next') return;
+
+        await i.deferUpdate();
+
+        const direction = action === 'view_next' ? 'next' : 'prev';
+        const order = direction === 'next' ? 'id_asc' : 'id_desc';
+        const operator = direction === 'next' ? '>' : '<';
+
+        try {
+            const newPostApiUrl = `${e6ai.baseUrl}/posts.json?tags=id:${operator}${currentPostId}+status:any&limit=1&login=${e6ai.username}&api_key=${e6ai.apiKey}`;
+            console.log(`Fetching ${direction} post from: ${newPostApiUrl}`);
+
+            const newPostResponse = await axios.get(newPostApiUrl, {
+                headers: { 'User-Agent': e6ai.userAgent },
+            });
+
+            if (newPostResponse.status === 200 && newPostResponse.data.posts && newPostResponse.data.posts.length > 0) {
+                const newPost = newPostResponse.data.posts[0];
+                const newReplyOptions = await generatePostMessage(newPost);
+                await i.editReply(newReplyOptions);
+            } else {
+                const originalMessage = i.message;
+                const actionRow = ActionRowBuilder.from(originalMessage.components[0]);
+                const buttonIndex = direction === 'next' ? 1 : 0;
+                actionRow.components[buttonIndex].setDisabled(true);
+                await i.editReply({ components: [actionRow] });
+            }
+        } catch (error) {
+            console.error(`Error fetching ${direction} post:`, error.isAxiosError ? error.toJSON() : error);
+            await i.followUp({ content: 'An error occurred while fetching the post.', ephemeral: true });
+        }
+    });
+
+    collector.on('end', async () => {
+        try {
+            if (message.editable) {
+                const finalMessage = await message.fetch();
+                if (finalMessage.components.length > 0) {
+                    const actionRow = ActionRowBuilder.from(finalMessage.components[0]);
+                    actionRow.components.forEach(component => component.setDisabled(true));
+                    await message.edit({ components: [actionRow] });
+                }
+            }
+        } catch (error) {
+            if (error.code === 10008) { // Unknown Message
+                console.log('Message was already deleted, cannot disable buttons.');
+            } else {
+                console.error('Error disabling buttons after collector timeout:', error);
+            }
+        }
+    });
+}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -35,7 +139,7 @@ module.exports = {
                 .setRequired(false))
         .setContexts([InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel]),
     async execute(interaction) {
-        if (replaceCommandAllowedUserIds.length > 0 && !replaceCommandAllowedUserIds.includes(interaction.user.id)) {
+        if (janitorUserIds.length > 0 && !janitorUserIds.includes(interaction.user.id)) {
             await interaction.reply({ content: 'You are not authorized to use this command.', ephemeral: true });
             return;
         }
@@ -82,7 +186,7 @@ module.exports = {
                 await interaction.editReply({ content: 'Could not fetch the old image. The post might not exist, the API response was not as expected, or the bot may not have permission to view it.', ephemeral: true });
                 return;
             }
-
+            
             const imageResponse = await axios.get(imageAttachment.url, { responseType: 'stream' });
 
             const formData = new FormData();
@@ -119,27 +223,6 @@ module.exports = {
                     .setImage(oldImageUrl);
 
                 await interaction.editReply({ embeds: [oldEmbed] });
-                
-                const isVideo = imageAttachment.contentType.startsWith('video/');
-
-                if (isVideo) {
-                    await interaction.followUp({ 
-                        content: `**REPLACEMENT:**\n${imageAttachment.url}`,
-                        embeds: [new EmbedBuilder()
-                            .setColor(0x33cc33)
-                            .setTitle('REPLACEMENT SUCCESSFUL')
-                            .setURL(`${e6ai.baseUrl}/posts/${postId}`)
-                            .setDescription(`The new file has been uploaded for post ${postId}.`)
-                        ]
-                    });
-                } else {
-                    const newEmbed = new EmbedBuilder()
-                        .setColor(0x33cc33)
-                        .setTitle('REPLACEMENT')
-                        .setURL(`${e6ai.baseUrl}/posts/${postId}`)
-                        .setImage(imageAttachment.url);
-                    await interaction.followUp({ embeds: [newEmbed] });
-                }
 
                 if (undelete) {
                     try {
@@ -153,11 +236,26 @@ module.exports = {
                                 'User-Agent': e6ai.userAgent,
                             },
                         });
-                        await interaction.followUp({ content: `Post ${postId} has also been undeleted.`, ephemeral: true });
+                        await new Promise(resolve => setTimeout(resolve, 2000));
                     } catch (undeleteError) {
                         console.error(`Failed to undelete post ${postId}:`, undeleteError);
                         await interaction.followUp({ content: `Replacement was successful, but failed to undelete post ${postId}. You may need to do it manually.`, ephemeral: true });
                     }
+                }
+
+                const refetchApiUrl = `${e6ai.baseUrl}/posts.json?tags=id:${postId}+status:any&login=${e6ai.username}&api_key=${e6ai.apiKey}`;
+                const refetchResponse = await axios.get(refetchApiUrl, {
+                    headers: { 'User-Agent': e6ai.userAgent },
+                });
+
+                if (refetchResponse.status === 200 && refetchResponse.data.posts.length > 0) {
+                    const updatedPost = refetchResponse.data.posts[0];
+                    const newReplyOptions = await generatePostMessage(updatedPost);
+                    
+                    const newMessage = await interaction.followUp(newReplyOptions);
+                    await setupPostCollector(newMessage, interaction);
+                } else {
+                    await interaction.followUp({ content: 'Successfully replaced, but could not refresh the post message.' });
                 }
             } else if (response.data && response.data.reason) {
                await interaction.editReply(`Failed to replace post ID ${postId}. API Reason: ${response.data.reason}`);

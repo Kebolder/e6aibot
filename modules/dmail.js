@@ -9,6 +9,7 @@ const invalidCommandResponse = require('./dmail_responses/invalidCommand.js');
 
 const DMAIL_CHECK_INTERVAL_MS = 15000;
 
+const PROCESSED_DMAIL_IDS_PATH = path.join(__dirname, '..', 'processed_dmail_ids.json');
 const processedDmailIds = new Set();
 let isCheckingDmail = false;
 
@@ -32,6 +33,31 @@ if (fs.existsSync(commandsPath)) {
     }
 } else {
     console.log(`[INFO] dmail_commands directory not found at ${commandsPath}. No dmail commands loaded.`);
+}
+
+function loadProcessedDmailIds() {
+    if (fs.existsSync(PROCESSED_DMAIL_IDS_PATH)) {
+        try {
+            const data = fs.readFileSync(PROCESSED_DMAIL_IDS_PATH, 'utf8');
+            if (data) {
+                const ids = JSON.parse(data);
+                for (const id of ids) {
+                    processedDmailIds.add(id);
+                }
+                console.log(`[DMAIL] Loaded ${processedDmailIds.size} processed dmail IDs from cache.`);
+            }
+        } catch (error) {
+            console.error('[DMAIL] Error loading or parsing processed_dmail_ids.json:', error);
+        }
+    }
+}
+
+function saveProcessedDmailIds() {
+    try {
+        fs.writeFileSync(PROCESSED_DMAIL_IDS_PATH, JSON.stringify([...processedDmailIds]));
+    } catch (error) {
+        console.error('[DMAIL] Error saving processed dmail IDs:', error);
+    }
 }
 
 async function markDmailAsRead(dmailId) {
@@ -92,7 +118,7 @@ async function checkDmail(client) {
 
                     if (command) {
                         try {
-                            await command.execute(dmail, client, { markDmailAsRead, processedDmailIds });
+                            await command.execute(dmail, client, { markDmailAsRead, processedDmailIds, saveProcessedDmailIds });
                         } catch (error) {
                             console.error(`[DMAIL] Error executing command '${commandName}' for dmail ${dmail.id}:`, error);
                         }
@@ -124,6 +150,7 @@ async function checkDmail(client) {
                         }
                         
                         processedDmailIds.add(dmail.id);
+                        saveProcessedDmailIds();
                     }
                 }
             }
@@ -140,6 +167,7 @@ async function checkDmail(client) {
 
 module.exports = {
     init: (client) => {
+        loadProcessedDmailIds();
         checkDmail(client);
         setInterval(() => checkDmail(client), DMAIL_CHECK_INTERVAL_MS);
         console.log(`[INFO] Dmail checker initialized. Polling every ${DMAIL_CHECK_INTERVAL_MS / 1000} seconds.`);

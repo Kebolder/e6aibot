@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const FormData = require('form-data');
 const { e6ai, ownerId } = require('../../config.js');
 const { generatePostMessage } = require('../postEmbed.js');
@@ -7,7 +7,7 @@ const invalidReplacementResponse = require('../dmail_responses/invalidReplacemen
 
 module.exports = {
     name: 'replacement',
-    async execute(dmail, client, { markDmailAsRead, processedDmailIds }) {
+    async execute(dmail, client, { markDmailAsRead, processedDmailIds, saveProcessedDmailIds }) {
         const body = dmail.body || '';
         const postLinkRegex = /^Post:\s*(https?:\/\/e6ai\.net\/posts\/(\d+))/im;
         const newImageRegex = /^New Image:\s*(https?:\/\/[^\s]+)/im;
@@ -46,6 +46,7 @@ module.exports = {
             }
             
             processedDmailIds.add(dmail.id);
+            saveProcessedDmailIds();
             return;
         }
 
@@ -89,7 +90,19 @@ module.exports = {
         const channel = await client.channels.fetch(targetChannelId).catch(() => null);
 
         if (channel && channel.isTextBased()) {
-            await channel.send({ embeds: [embed] });
+            const actionRow = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`accept-replacement_${postId}_${dmail.from_id}`)
+                        .setLabel('Accept')
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId(`decline-replacement_${postId}_${dmail.from_id}`)
+                        .setLabel('Decline')
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+            await channel.send({ embeds: [embed], components: [actionRow] });
 
             try {
                 let postApiUrl = `${e6ai.baseUrl}/posts.json?tags=id:${postId}`;
@@ -127,5 +140,6 @@ module.exports = {
 
         await markDmailAsRead(dmail.id);
         processedDmailIds.add(dmail.id);
+        saveProcessedDmailIds();
     }
 }; 

@@ -3,6 +3,7 @@ require('dotenv').config(); // Load .env file at the very top
 const fs = require('node:fs');
 const path = require('node:path');
 const { Client, Collection, Events, GatewayIntentBits } = require('discord.js');
+const { handleReplacement } = require('./modules/interactions/replacementHandler.js');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessageTyping] });
 
@@ -64,7 +65,11 @@ client.on(Events.InteractionCreate, async interaction => {
 				await interaction.reply({ content: 'There was an error while executing this command!', ephemeral: true });
 			}
 		}
-	}
+	} else if (interaction.isButton()) {
+        if (interaction.customId.startsWith('accept-replacement_') || interaction.customId.startsWith('decline-replacement_')) {
+            handleReplacement(interaction, client);
+        }
+    }
 });
 
 client.login(process.env.BOT_TOKEN); 

@@ -3,7 +3,7 @@ const axios = require('axios');
 const config = require('../../config.js');
 const { generatePostMessage } = require('../postEmbed.js');
 
-const { e6ai, replaceCommandAllowedUserIds } = config;
+const { e6ai, janitorUserIds } = config;
 
 async function setupPostCollector(message, interaction) {
     const collector = message.createMessageComponentCollector({ time: 3_600_000 }); // 1 hour
@@ -12,7 +12,7 @@ async function setupPostCollector(message, interaction) {
         const [action, currentPostId] = i.customId.split(':');
         
         if (action === 'undelete') {
-            if (!replaceCommandAllowedUserIds.includes(i.user.id)) {
+            if (!janitorUserIds.includes(i.user.id)) {
                 await i.reply({ content: 'You are not authorized to use this button.', ephemeral: true });
                 return;
             }

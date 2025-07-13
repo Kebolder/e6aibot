@@ -11,7 +11,7 @@ module.exports = {
         baseUrl: (process.env.E6AI_BASE_URL || 'https://e6ai.net/').replace(/\/$/, ""),
         userAgent: `E6aiBot/${botVersion} (by Slop on e6AI)`,
     },
-    replaceCommandAllowedUserIds: [
+    janitorUserIds: [
         process.env.OWNER_ID, // Me
         '439174124816957450', // Also Me
         '1251068622454128721', // Jello
